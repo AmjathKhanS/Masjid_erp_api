@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
@@ -18,12 +18,33 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 builder.Services.AddControllers();
 
 // Configure MySQL Database
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
-    ?? builder.Configuration.GetConnectionString("DefaultConnection");
-var serverVersion = new MySqlServerVersion(new Version(9, 5, 0));
+var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+// Parse Railway's mysql:// format
+if (!string.IsNullOrEmpty(connectionString) && connectionString.StartsWith("mysql://"))
+{
+    try
+    {
+        var uri = new Uri(connectionString);
+        var userInfo = uri.UserInfo.Split(':');
+        connectionString = $"Server={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};User={userInfo[0]};Password={userInfo[1]};";
+        Console.WriteLine("✅ DATABASE_URL parsed");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ Parse error: {ex.Message}");
+    }
+}
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+}
+
+
+var serverVersion = ServerVersion.AutoDetect(connectionString);
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, serverVersion));
-
 // Add AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
@@ -88,6 +109,22 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+
+// Test database connection
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await db.Database.CanConnectAsync();
+    Console.WriteLine("✅ DB connected");
+    await db.Database.MigrateAsync();
+    Console.WriteLine("✅ Migrations applied");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ DB error: {ex.Message}");
+}
+
 // Configure the HTTP request pipeline
 // Enable Swagger in all environments (for Railway deployment)
 app.UseSwagger();
@@ -100,12 +137,14 @@ app.UseSwaggerUI(c =>
 // Use custom exception middleware
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseCors("AllowAll");
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
