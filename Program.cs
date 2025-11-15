@@ -18,19 +18,104 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 builder.Services.AddControllers();
 
 // Configure MySQL Database
-// Build connection string from environment variables
-var host = Environment.GetEnvironmentVariable("MYSQLHOST") ?? "localhost";
-var port2 = Environment.GetEnvironmentVariable("MYSQLPORT") ?? "3306";
-var database = Environment.GetEnvironmentVariable("MYSQLDATABASE") ?? "railway";
-var user = Environment.GetEnvironmentVariable("MYSQLUSER") ?? "root";
-var password = Environment.GetEnvironmentVariable("MYSQLPASSWORD") ?? "";
+string connectionString;
+string host, port2, database, user, password;
 
-var connectionString = $"Server={host};Port={port2};Database={database};User={user};Password={password};";
+// Try to parse DATABASE_URL first (Railway's preferred format)
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
-Console.WriteLine($"🔍 Connecting to: {host}:{port}/{database} as {user}");
-
-if (string.IsNullOrEmpty(connectionString))
+if (!string.IsNullOrEmpty(databaseUrl))
 {
+    Console.WriteLine("🔍 Using DATABASE_URL for connection");
+    try
+    {
+        // Parse DATABASE_URL format: mysql://user:password@host:port/database
+        var uri = new Uri(databaseUrl);
+        host = uri.Host;
+        port2 = uri.Port > 0 ? uri.Port.ToString() : "3306";
+        database = uri.AbsolutePath.TrimStart('/');
+
+        // Parse user:password from UserInfo
+        if (!string.IsNullOrEmpty(uri.UserInfo) && uri.UserInfo.Contains(':'))
+        {
+            var userInfo = uri.UserInfo.Split(':');
+            user = userInfo[0];
+            password = userInfo.Length > 1 ? userInfo[1] : "";
+        }
+        else
+        {
+            user = uri.UserInfo;
+            password = "";
+        }
+
+        connectionString = $"Server={host};Port={port2};Database={database};User={user};Password={password};";
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ Failed to parse DATABASE_URL: {ex.Message}");
+        Console.WriteLine("Falling back to individual environment variables...");
+        databaseUrl = null; // Trigger fallback
+    }
+}
+
+// Fallback to individual environment variables (for local development or if DATABASE_URL fails)
+if (string.IsNullOrEmpty(databaseUrl))
+{
+    Console.WriteLine("🔍 Using individual environment variables for connection");
+
+    // Support multiple variable name formats (MYSQLHOST, MYSQL_HOST, etc.)
+    host = Environment.GetEnvironmentVariable("MYSQLHOST")
+        ?? Environment.GetEnvironmentVariable("MYSQL_HOST")
+        ?? "localhost";
+
+    port2 = Environment.GetEnvironmentVariable("MYSQLPORT")
+        ?? Environment.GetEnvironmentVariable("MYSQL_PORT")
+        ?? "3306";
+
+    database = Environment.GetEnvironmentVariable("MYSQLDATABASE")
+        ?? Environment.GetEnvironmentVariable("MYSQL_DATABASE")
+        ?? "railway";
+
+    user = Environment.GetEnvironmentVariable("MYSQLUSER")
+        ?? Environment.GetEnvironmentVariable("MYSQL_USER")
+        ?? "root";
+
+    password = Environment.GetEnvironmentVariable("MYSQLPASSWORD")
+        ?? Environment.GetEnvironmentVariable("MYSQL_PASSWORD")
+        ?? "";
+
+    connectionString = $"Server={host};Port={port2};Database={database};User={user};Password={password};";
+}
+
+// Log connection details (mask password for security)
+Console.WriteLine($"🔍 Connection Details:");
+Console.WriteLine($"  Host: {host}");
+Console.WriteLine($"  Port: {port2}");
+Console.WriteLine($"  Database: {database}");
+Console.WriteLine($"  User: {user}");
+Console.WriteLine($"  Password: {(string.IsNullOrEmpty(password) ? "[EMPTY - WARNING!]" : "[SET]")}");
+
+// Validate credentials before attempting connection
+if (string.IsNullOrEmpty(user))
+{
+    Console.WriteLine("❌ ERROR: Database user is empty!");
+    Console.WriteLine("Please check your Railway environment variables.");
+    Console.WriteLine("Available environment variables:");
+    foreach (var envVar in Environment.GetEnvironmentVariables().Keys.Cast<string>().Where(k => k.Contains("MYSQL") || k.Contains("DATABASE")))
+    {
+        Console.WriteLine($"  - {envVar}");
+    }
+}
+
+if (string.IsNullOrEmpty(password))
+{
+    Console.WriteLine("⚠️ WARNING: Database password is empty! This may cause authentication failures.");
+}
+
+// Final fallback to appsettings.json if still empty
+if (string.IsNullOrEmpty(connectionString) || connectionString.Length < 20)
+{
+    Console.WriteLine("⚠️ Connection string appears invalid, trying appsettings.json...");
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 }
 
