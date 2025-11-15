@@ -18,8 +18,12 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 builder.Services.AddControllers();
 
 // Configure MySQL Database
-string connectionString;
-string host, port2, database, user, password;
+string connectionString = "";
+string host = "localhost";
+string port2 = "3306";
+string database = "railway";
+string user = "root";
+string password = "";
 
 // Try to parse DATABASE_URL first (Railway's preferred format)
 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
@@ -44,7 +48,7 @@ if (!string.IsNullOrEmpty(databaseUrl))
         }
         else
         {
-            user = uri.UserInfo;
+            user = uri.UserInfo ?? "root";
             password = "";
         }
 
@@ -116,7 +120,7 @@ if (string.IsNullOrEmpty(password))
 if (string.IsNullOrEmpty(connectionString) || connectionString.Length < 20)
 {
     Console.WriteLine("⚠️ Connection string appears invalid, trying appsettings.json...");
-    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "";
 }
 
 
