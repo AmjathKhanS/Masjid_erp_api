@@ -18,23 +18,16 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 builder.Services.AddControllers();
 
 // Configure MySQL Database
-var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
+// Build connection string from environment variables
+var host = Environment.GetEnvironmentVariable("MYSQLHOST") ?? "localhost";
+var port2 = Environment.GetEnvironmentVariable("MYSQLPORT") ?? "3306";
+var database = Environment.GetEnvironmentVariable("MYSQLDATABASE") ?? "railway";
+var user = Environment.GetEnvironmentVariable("MYSQLUSER") ?? "root";
+var password = Environment.GetEnvironmentVariable("MYSQLPASSWORD") ?? "";
 
-// Parse Railway's mysql:// format
-if (!string.IsNullOrEmpty(connectionString) && connectionString.StartsWith("mysql://"))
-{
-    try
-    {
-        var uri = new Uri(connectionString);
-        var userInfo = uri.UserInfo.Split(':');
-        connectionString = $"Server={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};User={userInfo[0]};Password={userInfo[1]};";
-        Console.WriteLine("✅ DATABASE_URL parsed");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"❌ Parse error: {ex.Message}");
-    }
-}
+var connectionString = $"Server={host};Port={port2};Database={database};User={user};Password={password};";
+
+Console.WriteLine($"🔍 Connecting to: {host}:{port}/{database} as {user}");
 
 if (string.IsNullOrEmpty(connectionString))
 {
