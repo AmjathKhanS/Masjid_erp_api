@@ -124,7 +124,9 @@ if (string.IsNullOrEmpty(connectionString) || connectionString.Length < 20)
 }
 
 
-var serverVersion = ServerVersion.AutoDetect(connectionString);
+// Use a static server version instead of AutoDetect to prevent startup crashes
+// AutoDetect requires a live database connection which can fail during deployment
+var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, serverVersion));
 // Add AutoMapper
